@@ -45,6 +45,8 @@
 #include <lib/drivers/rangefinder/PX4Rangefinder.hpp>
 #include <lib/perf/perf_counter.h>
 #include <px4_platform_common/px4_config.h>
+#include <px4_platform_common/module.h>
+#include <px4_platform_common/module_params.h>
 #include <px4_platform_common/defines.h>
 #include <px4_platform_common/px4_work_queue/ScheduledWorkItem.hpp>
 
@@ -77,16 +79,16 @@ private:
 
 	void UpdateMode();
 
-	void ProcessMeasurement(void *data);
+	void ProcessMeasurement();
 
-	static status_t measurement_ready_callback(status_t status, void *data);
+	static status_t measurement_ready_callback(status_t status, argus_hnd_t * device);
 
 	void get_info();
 	status_t set_mode(argus_mode_t mode);
 	status_t set_rate(uint32_t rate_hz);
 
 	argus_hnd_t *_hnd{nullptr};
-	argus_mode_t _mode{ARGUS_MODE_B}; // Short-Range
+	argus_mode_t _mode{ARGUS_MODE_SHORT_RANGE}; // Short-Range
 
 	enum class STATE : uint8_t {
 		TEST,

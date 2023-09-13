@@ -107,9 +107,86 @@ status_t S2PI_Init(s2pi_slave_t defaultSlave, uint32_t baudRate_Bps)
 * - #STATUS_BUSY: An SPI transfer is in progress.
 * - #STATUS_S2PI_GPIO_MODE: The module is in GPIO mode.
 *****************************************************************************/
-status_t S2PI_GetStatus(void)
+status_t S2PI_GetStatus(s2pi_slave_t slave)
 {
 	return s2pi_.Status;
+}
+
+/*!***************************************************************************
+ * @brief   Tries to grab the SPI interface mutex for the next transfer.
+ *
+ * @details This mutex prevents new asynchronous SPI requests to interfere
+ *          with transfers already in progress for this interface.
+ *
+ *          Note that this is only required if multiple device are connected to
+ *          a single SPI interface. If only operating a single device per SPI,
+ *          the function can simply always return #STATUS_OK.
+ *
+ *          There must be a dedicated mutex object per SPI interface if
+ *          multiple SPI interfaces are used.
+ *
+ *          The mutex will be released in the #S2PI_ReleaseMutex function.
+ *          See #S2PI_ReleaseMutex for additional information.
+ *
+ *          Here is a simple example implementation for the multiple devices on
+ *          a single SPI interface case. Note that the SpiMutexBlocked must be
+ *          defined per SPI interface if multiple SPI interfaces are used.
+ *
+ *          @code
+ *          static volatile bool SpiMutexBlocked = false;
+ *          status_t S2PI_TryGetMutex(s2pi_slave_t slave)
+ *          {
+ *              (void) slave; // not used in this implementation as all
+ *                            // SPI slaves are on the same SPI interface
+ *
+ *              status_t status = STATUS_BUSY;
+ *              IRQ_LOCK();
+ *              if (!SpiMutexBlocked)
+ *              {
+ *                  SpiMutexBlocked = true;
+ *                  status = STATUS_OK;
+ *              }
+ *              IRQ_UNLOCK();
+ *              return status;
+ *          }
+ *          void S2PI_ReleaseMutex(s2pi_slave_t slave)
+ *          {
+ *              (void) slave; // not used in this implementation
+ *              SpiMutexBlocked = false;
+ *          }
+ *          @endcode
+ *
+ * @param   slave The specified S2PI slave. Note that the slave information is
+ *                only required if multiple SPI instances are used in order to
+ *                map to the correct SPI instance.
+ *
+ * @return  Returns the \link #status_t status\endlink:
+ *           - #STATUS_OK: the SPI interface was successfully reserved for the caller
+ *           - #STATUS_BUSY: another transfer is ongoing, the caller must not access the bus
+ *****************************************************************************/
+status_t S2PI_TryGetMutex(s2pi_slave_t slave) {
+	return STATUS_OK;
+}
+
+/*!***************************************************************************
+ * @brief   Releases the SPI interface mutex.
+ *
+ * @details Once the mutex is captured, only a single thread (the one that
+ *          captured it) will call this release function, so there is no
+ *          need for any test or thread safe barriers. Also there is no
+ *          side effect of calling this function when the Mutex is not
+ *          taken so this function can be really simple and doesn't need
+ *          to return anything.
+ *
+ *          See #S2PI_TryGetMutex on more information and an example
+ *          implementation for the single SPI interface case.
+ *
+ * @param   slave The specified S2PI slave. Note that the slave information is
+ *                only required if multiple SPI instances are used in order to
+ *                map to the correct SPI instance.
+ *****************************************************************************/
+void S2PI_ReleaseMutex(s2pi_slave_t slave) {
+	return;
 }
 
 /*!***************************************************************************
@@ -135,7 +212,7 @@ status_t S2PI_SetBaudRate(uint32_t baudRate_Bps)
 * switch back to ordinary SPI functionality.
 * @return Returns the \link #status_t status\endlink (#STATUS_OK on success).
 *****************************************************************************/
-status_t S2PI_CaptureGpioControl(void)
+status_t S2PI_CaptureGpioControl(s2pi_slave_t slave)
 {
 	/* Check if something is ongoing. */
 	IRQ_LOCK();
@@ -165,7 +242,7 @@ status_t S2PI_CaptureGpioControl(void)
 * the #S2PI_CaptureGpioControl function.
 * @return Returns the \link #status_t status\endlink (#STATUS_OK on success).
 *****************************************************************************/
-status_t S2PI_ReleaseGpioControl(void)
+status_t S2PI_ReleaseGpioControl(s2pi_slave_t slave)
 {
 	/* Check if something is ongoing. */
 	IRQ_LOCK();
@@ -372,7 +449,7 @@ status_t S2PI_TransferFrame(s2pi_slave_t spi_slave, uint8_t const *txData, uint8
 * invoked with the #ERROR_ABORTED error byte.
 * @return Returns the \link #status_t status\endlink (#STATUS_OK on success).
 *****************************************************************************/
-status_t S2PI_Abort(void)
+status_t S2PI_Abort(s2pi_slave_t slave)
 {
 	status_t status = s2pi_.Status;
 

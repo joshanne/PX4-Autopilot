@@ -1,11 +1,11 @@
 /*************************************************************************//**
  * @file
- * @brief    	This file is part of the AFBR-S50 hardware API.
- * @details		Defines the generic measurement parameters and data structures.
+ * @brief       This file is part of the AFBR-S50 hardware API.
+ * @details     Defines the generic measurement parameters and data structures.
  *
  * @copyright
  *
- * Copyright (c) 2021, Broadcom Inc
+ * Copyright (c) 2023, Broadcom Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -36,17 +36,20 @@
 
 #ifndef ARGUS_MEAS_H
 #define ARGUS_MEAS_H
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /*!***************************************************************************
- * @defgroup 	argusmeas Measurement/Device Control
- * @ingroup		argusapi
+ * @defgroup    argus_meas Measurement/Device Control
+ * @ingroup     argus_api
  *
- * @brief 		Measurement/Device control module
+ * @brief       Measurement/Device control module
  *
- * @details		This module contains measurement and device control specific
- * 				definitions and methods.
+ * @details     This module contains measurement and device control specific
+ *              definitions and methods.
  *
- * @addtogroup 	argusmeas
+ * @addtogroup  argus_meas
  * @{
  *****************************************************************************/
 
@@ -66,71 +69,72 @@
 #define ARGUS_AUX_DATA_SIZE (3U * ARGUS_AUX_CHANNEL_COUNT) // 3 bytes * x channels * 1 phase
 
 /*!***************************************************************************
- * @brief	The device measurement configuration structure.
- * @details	The portion of the configuration data that belongs to the
- * 			measurement cycle. I.e. the data that defines a measurement frame.
+ * @brief   The device measurement configuration structure.
+ * @details The portion of the configuration data that belongs to the
+ *          measurement cycle. I.e. the data that defines a measurement frame.
  *****************************************************************************/
-typedef struct {
-	/*! Frame integration time in microseconds.
-	 *  The integration time determines the measured time between
-	 *  the start signal and the IRQ. Note that this value will be
-	 *  slightly larger than the actual integration time since the
-	 *  watch is started before the SPI transfer and stopped in the
-	 *  IRQ service routine which also might be delayed due to higher
-	 *  priority tasks. */
-	uint32_t IntegrationTime;
+typedef struct argus_meas_frame_t
+{
+    /*! Frame integration time in microseconds.
+     *  The integration time determines the measured time between
+     *  the start signal and the IRQ. Note that this value will be
+     *  slightly larger than the actual integration time since the
+     *  watch is started before the SPI transfer and stopped in the
+     *  IRQ service routine which also might be delayed due to higher
+     *  priority tasks. */
+    uint32_t IntegrationTime;
 
-	/*! Pixel enabled mask for the 32 pixels sorted
-	 *  by x-y-indices.
-	 *  See [pixel mapping](@ref argusmap) for more
-	 *  details on the pixel mask. */
-	uint32_t PxEnMask;
+    /*! Pixel enabled mask for the 32 pixels sorted
+     *  by x-y-indices.
+     *  See [pixel mapping](@ref argus_map) for more
+     *  details on the pixel mask. */
+    uint32_t PxEnMask;
 
-	/*! ADS channel enabled mask for the remaining
-	 *  channels 31 .. 63 (miscellaneous values).
-	 *  See [pixel mapping](@ref argusmap) for more
-	 *  details on the ADC channel mask. */
-	uint32_t ChEnMask;
+    /*! ADS channel enabled mask for the remaining
+     *  channels 31 .. 63 (miscellaneous values).
+     *  See [pixel mapping](@ref argus_map) for more
+     *  details on the ADC channel mask. */
+    uint32_t ChEnMask;
 
-	/*! The current state of the measurement frame:
-	 *  - Measurement Mode,
-	 *  - A/B Frame,
-	 *  - PLL_Locked Bit,
-	 *  - BGL Warning/Error,
-	 *  - DCA State,
-	 *  - ... */
-	argus_state_t State;
+    /*! The current state of the measurement frame:
+     *  - Measurement Mode,
+     *  - A/B Frame,
+     *  - PLL_Locked Bit,
+     *  - BGL Warning/Error,
+     *  - DCA State,
+     *  - ... */
+    argus_state_t State;
 
-	/*! Pattern count per sample in uq10.6 format.
-	 *  Determines the analog integration depth. */
-	uq10_6_t AnalogIntegrationDepth;
+    /*! Pattern count per sample in uq10.6 format.
+     *  Determines the analog integration depth. */
+    uq10_6_t AnalogIntegrationDepth;
 
-	/*! Sample count per phase/frame.
-	 *  Determines the digital integration depth. */
-	uint16_t DigitalIntegrationDepth;
+    /*! Sample count per phase/frame.
+     *  Determines the digital integration depth. */
+    uint16_t DigitalIntegrationDepth;
 
-	/*! Laser Modulation Current per sample in mA.
-	 *  Determines the optical output power. */
-	uq12_4_t OutputPower;
+    /*! Laser Modulation Current per sample in mA.
+     *  Determines the optical output power. */
+    uq12_4_t OutputPower;
 
-	/*! The amplitude that is evaluated and used in the DCA module. */
-	uq12_4_t DCAAmplitude;
+    /*! Laser Bias Current Settings in LSB. */
+    uint8_t BiasCurrent;
 
-	/*! Laser Bias Current Settings in LSB. */
-	uint8_t BiasCurrent;
+    /*! Charge pump voltage per sample in LSB.
+     *  Determines the pixel gain.  */
+    uint8_t PixelGain;
 
-	/*! Charge pump voltage per sample in LSB.
-	 *  Determines the pixel gain.  */
-	uint8_t PixelGain;
+    /*! PLL Frequency Offset, caused by temperature
+     *  compensation, in PLL_INT_PRD LSBs. */
+    int8_t PllOffset;
 
-	/*! PLL Frequency Offset, caused by temperature
-	 *  compensation, in PLL_INT_PRD LSBs. */
-	int8_t PllOffset;
-
-	/*! The current PLL_CTRL_CUR value. */
-	uint8_t PllCtrlCur;
+    /*! The current PLL_CTRL_CUR value. */
+    uint8_t PllCtrlCur;
 
 } argus_meas_frame_t;
 
 /*! @} */
+#ifdef __cplusplus
+} // extern "C"
+#endif
 #endif /* ARGUS_MEAS_H */

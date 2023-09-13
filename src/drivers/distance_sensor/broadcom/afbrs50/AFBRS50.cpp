@@ -70,12 +70,12 @@ AFBRS50::~AFBRS50()
 	perf_free(_sample_perf);
 }
 
-status_t AFBRS50::measurement_ready_callback(status_t status, void *data)
+status_t AFBRS50::measurement_ready_callback(status_t status, argus_hnd_t * device)
 {
 	if (!up_interrupt_context()) {
 		if (status == STATUS_OK) {
 			if (g_dev) {
-				g_dev->ProcessMeasurement(data);
+				g_dev->ProcessMeasurement();
 			}
 
 		} else {
@@ -86,35 +86,33 @@ status_t AFBRS50::measurement_ready_callback(status_t status, void *data)
 	return status;
 }
 
-void AFBRS50::ProcessMeasurement(void *data)
+void AFBRS50::ProcessMeasurement(void)
 {
-	if (data != nullptr) {
-		perf_count(_sample_perf);
+	perf_count(_sample_perf);
 
-		argus_results_t res{};
-		status_t evaluate_status = Argus_EvaluateData(_hnd, &res, data);
+	argus_results_t res{};
+	status_t evaluate_status = Argus_EvaluateData(_hnd, &res);
 
-		if ((evaluate_status == STATUS_OK) && (res.Status == STATUS_OK)) {
-			uint32_t result_mm = res.Bin.Range / (Q9_22_ONE / 1000);
-			float result_m = static_cast<float>(result_mm) / 1000.f;
-			int8_t quality = res.Bin.SignalQuality;
+	if ((evaluate_status == STATUS_OK) && (res.Status == STATUS_OK)) {
+		uint32_t result_mm = res.Bin.Range / (Q9_22_ONE / 1000);
+		float result_m = static_cast<float>(result_mm) / 1000.f;
+		int8_t quality = res.Bin.SignalQuality;
 
-			// Signal quality indicates 100% for good signals, 50% and lower for weak signals.
-			// 1% is an errored signal (not reliable). Signal Quality of 0% is unknown.
-			if (quality == 1) {
-				quality = 0;
-			}
-
-			// distance quality check
-			if (result_m > _max_distance) {
-				result_m = 0.0;
-				quality = 0;
-			}
-
-			_current_distance = result_m;
-			_current_quality = quality;
-			_px4_rangefinder.update(((res.TimeStamp.sec * 1000000ULL) + res.TimeStamp.usec), result_m, quality);
+		// Signal quality indicates 100% for good signals, 50% and lower for weak signals.
+		// 1% is an errored signal (not reliable). Signal Quality of 0% is unknown.
+		if (quality == 1) {
+			quality = 0;
 		}
+
+		// distance quality check
+		if (result_m > _max_distance) {
+			result_m = 0.0;
+			quality = 0;
+		}
+
+		_current_distance = result_m;
+		_current_quality = quality;
+		_px4_rangefinder.update(((res.TimeStamp.sec * 1000000ULL) + res.TimeStamp.usec), result_m, quality);
 	}
 }
 
@@ -250,21 +248,32 @@ void AFBRS50::Run()
 				_state = STATE::STOP;
 				ScheduleNow();
 			}
+			status = Argus_SetMeasurementMode(_hnd, ARGUS_MODE_SHORT_RANGE);
 
-			status = Argus_SetConfigurationDFMMode(_hnd, ARGUS_MODE_B, DFM_MODE_8X);
+			if (status != STATUS_OK) {
+				PX4_ERR("Argus_SetMeasurementMode status not okay: %i", (int)status);
+			}
+
+			status = Argus_SetConfigurationDFMMode(_hnd, DFM_MODE_8X);
 
 			if (status != STATUS_OK) {
 				PX4_ERR("Argus_SetConfigurationDFMMode status not okay: %i", (int)status);
 			}
 
-			status = Argus_SetConfigurationDFMMode(_hnd, ARGUS_MODE_A, DFM_MODE_8X);
+			status = Argus_SetMeasurementMode(_hnd, ARGUS_MODE_LONG_RANGE);
+
+			if (status != STATUS_OK) {
+				PX4_ERR("Argus_SetMeasurementMode status not okay: %i", (int)status);
+			}
+
+			status = Argus_SetConfigurationDFMMode(_hnd, DFM_MODE_8X);
 
 			if (status != STATUS_OK) {
 				PX4_ERR("Argus_SetConfigurationDFMMode status not okay: %i", (int)status);
 			}
 
 			// start in short range mode
-			_mode = ARGUS_MODE_B;
+			_mode = ARGUS_MODE_SHORT_RANGE;
 			set_mode(_mode);
 
 			if (status != STATUS_OK) {
@@ -311,9 +320,9 @@ void AFBRS50::UpdateMode()
 	// only update mode if _current_distance is a valid measurement
 	if ((_current_distance > 0) && (_current_quality > 0)) {
 
-		if ((_current_distance >= _long_range_threshold) && (_mode != ARGUS_MODE_A)) {
+		if ((_current_distance >= _long_range_threshold) && (_mode != ARGUS_MODE_LONG_RANGE)) {
 			// change to long range mode
-			argus_mode_t mode = ARGUS_MODE_A;
+			argus_mode_t mode = ARGUS_MODE_LONG_RANGE;
 			status_t status = set_mode(mode);
 
 			if (status != STATUS_OK) {
@@ -332,9 +341,9 @@ void AFBRS50::UpdateMode()
 				PX4_ERR("set_rate status not okay: %i", (int)status);
 			}
 
-		} else if ((_current_distance <= _short_range_threshold) && (_mode != ARGUS_MODE_B)) {
+		} else if ((_current_distance <= _short_range_threshold) && (_mode != ARGUS_MODE_SHORT_RANGE)) {
 			// change to short range mode
-			argus_mode_t mode = ARGUS_MODE_B;
+			argus_mode_t mode = ARGUS_MODE_SHORT_RANGE;
 			status_t status = set_mode(mode);
 
 			if (status != STATUS_OK) {
@@ -379,18 +388,18 @@ status_t AFBRS50::set_mode(argus_mode_t mode)
 		px4_usleep(1_ms);
 	}
 
-	status_t status = Argus_SetConfigurationMeasurementMode(_hnd, mode);
+	status_t status = Argus_SetMeasurementMode(_hnd, mode);
 
 	if (status != STATUS_OK) {
-		PX4_ERR("Argus_SetConfigurationMeasurementMode status not okay: %i", (int)status);
+		PX4_ERR("Argus_SetMeasurementMode status not okay: %i", (int)status);
 		return status;
 	}
 
 	argus_mode_t current_mode;
-	status = Argus_GetConfigurationMeasurementMode(_hnd, &current_mode);
+	status = Argus_GetMeasurementMode(_hnd, &current_mode);
 
 	if (status != STATUS_OK) {
-		PX4_ERR("Argus_GetConfigurationMeasurementMode status not okay: %i", (int)status);
+		PX4_ERR("Argus_GetMeasurementMode status not okay: %i", (int)status);
 		return status;
 
 	} else {
@@ -431,8 +440,8 @@ void AFBRS50::get_info()
 {
 	argus_mode_t current_mode;
 	argus_dfm_mode_t dfm_mode;
-	Argus_GetConfigurationMeasurementMode(_hnd, &current_mode);
-	Argus_GetConfigurationDFMMode(_hnd, current_mode, &dfm_mode);
+	Argus_GetMeasurementMode(_hnd, &current_mode);
+	Argus_GetConfigurationDFMMode(_hnd, &dfm_mode);
 
 	PX4_INFO_RAW("distance: %.3fm\n", (double)_current_distance);
 	PX4_INFO_RAW("mode: %d\n", current_mode);
@@ -543,6 +552,7 @@ $ afbrs50 stop
 	PRINT_MODULE_USAGE_PARAM_INT('r', 25, 0, 25, "Sensor rotation - downward facing by default", true);
 	PRINT_MODULE_USAGE_COMMAND_DESCR("test", "Test driver");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("stop", "Stop driver");
+	PRINT_MODULE_USAGE_COMMAND_DESCR("xtalkcal", "XTalk Calibration");
 	return PX4_OK;
 }
 
